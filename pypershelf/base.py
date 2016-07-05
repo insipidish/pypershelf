@@ -1,4 +1,4 @@
-from sqlent.src.query import Query
+from sqlent import Query
 
 class _BaseModel(object):
     pk = 'id'
@@ -14,33 +14,40 @@ class _BaseModel(object):
             else:
                setattr(self, a, obj(b) if isinstance(b, dict) else b)
 
-    def outboundHasOne(self, ForeignModelClass, foreign_pk_name, this_fk_name):
-        with self.__class__.connection.cursor() as cur:
-            sql_statement = "SELECT * FROM {foreign_table_name} where {foreign_pk_name} = {this_fk_val};".format(
-                foreign_table_name = ForeignModelClass.table_name,
-                foreign_pk_name = foreign_pk_name,
-                this_fk_val = getattr(self, this_fk_name))
-            cur.execute(sql_statement)
-            result = cur.fetchone()
-            return ForeignModelClass(result)
+    def outboundHasOne(self, ForeignModelClass, foreign_col_name, this_fk_col_name):
+        """
+        This function is designed to get one instance of a related object such
+        that this object contains a column linking it to the forign object.
+        Example:- This could be used to get the Artist for an Album from the Album
+        object in the Chinook database.
+        FoereignModelClass: The class instances should be returned (eg: Artist)
+        foreign_col_name: The column name in the foreign table to match this against
+        this_fk_col_name: The column name in this table whose value links this
+        object with the object in the foreign table
+        """
+        sql_statement = "SELECT * FROM {foreign_table_name} where {foreign_col_name} = {this_fk_val};".format(
+            foreign_table_name = ForeignModelClass.table_name,
+            foreign_col_name = foreign_col_name,
+            this_fk_val = getattr(self, this_fk_col_name))
+        results = self.__class__.get_sql_results(sql_statement)
+        return ForeignModelClass(results[0])
 
-    def inboundHasMany(self, ForeignModelClass, foreign_fk_name, this_pk_name):
-        with self.__class__.connection.cursor() as cur:
-            cur.execute(Query().select().table(ForeignModelClass.table_name).where_equal(foreign_fk_name, getattr(self, this_pk_name)).toString())
-            results = cur.fetchall()
-            return [ForeignModelClass(r) for r in results]
+    def inboundHasMany(self, ForeignModelClass, foreign_col_name_to_search, this_col_name_that_contains_search_value):
+        query = Query().select().table(ForeignModelClass.table_name).where(foreign_col_name_to_search, getattr(self, this_col_name_that_contains_search_value)).to_string()
+        results = self.__class__.get_sql_results(query)
+        return [ForeignModelClass(r) for r in results]
 
     @classmethod
     def all(cls):
-        cur = cls.connection.cursor()
-        cur.execute(Query().select().table(cls.table_name).to_string())
-        results = cur.fetchall()
-        cur.close()
+        results = cls.get_sql_results(Query().select().table(cls.table_name).to_string())
         return [cls(r) for r in results]
 
+    @classmethod
+    def sqlent_query(cls):
+        from sqlent import Query
+        return Query().table(cls.table_name)
 
-def get_base_model(conn):
-    class BaseModel(_BaseModel):
-        pass
-    BaseModel.connection = conn
-    return BaseModel
+    @classmethod
+    def raw_sql(cls, sql):
+        results = cls.get_sql_results(sql)
+        return [cls(r) for r in results]

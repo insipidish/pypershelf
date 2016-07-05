@@ -1,9 +1,11 @@
-def get_sql_results(conn, sql):
-    cur = conn.cursor()
-    cur.execute(sql)
-    results = cur.fetchall()
-    cur.close()
-    return results
+def get_sql_results_factory(conn):
+    def f(sql):
+        cur = conn.cursor()
+        cur.execute(sql)
+        results = cur.fetchall()
+        cur.close()
+        return results
+    return f
 
 def dict_factory(cursor, row):
     d = {}
